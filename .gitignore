@@ -1,0 +1,12 @@
+*.fds
+*.lst
+.DS_Store
+Thumbs.db
+*.cdl
+*.lbl
+*.nl
+*.mlb
+*.dbg
+*.labels.txt
+*.map.txt
+*.o
