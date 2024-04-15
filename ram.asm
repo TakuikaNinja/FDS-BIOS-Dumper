@@ -7,12 +7,11 @@
 	NMIReady: .res 1
 	NeedDraw: .res 1
 	NeedPPUMask: .res 1
-	FrameCount: .res 2
 	BGMode: .res 1
-	DisplayToggle: .res 1
+	StringStatus: .res 1
 
 ; BIOS zeropage variables
-.segment "BIOSZP"
+.segment "BIOSZP": zeropage
 
 ; controller states
 	ExpTransitions: .res 4 ; up->down transitions for Pad1, Pad2, Exp1, Exp2 (used by ReadDownExpPads)

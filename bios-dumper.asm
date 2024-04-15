@@ -2,6 +2,7 @@
 .include "ram.asm"
 .include "constants.asm"
 
+BOOT_ID = 4
 FILE_COUNT = 5
 
 .segment "SIDE1A"
@@ -16,7 +17,7 @@ FILE_COUNT = 5
 .byte $00 ; disk
 .byte $00 ; disk type
 .byte $00 ; unknown
-.byte FILE_COUNT ; boot file count
+.byte BOOT_ID ; boot file ID
 .byte $FF,$FF,$FF,$FF,$FF
 .byte $35 ; 2024 (heisei era)
 .byte $04 ; april
@@ -100,12 +101,12 @@ FILE_COUNT = 5
 .byte 3,3
 .byte "-BYPASS-"
 .word PPU_CTRL
-.word __FILE4_DAT_SIZE__
+.word __FILE3_DAT_SIZE__
 .byte 0 ; PRG
 ; block 4
 .byte $04
 .segment "FILE3_DAT"
-.byte $90 ; enable NMI byte sent to PPU_CTRL
+.byte $80 ; enable NMI byte sent to PPU_CTRL
 
 ; This block will never be loaded but it is large enough for an NMI to trigger
 ; while seeking the disk on boot-up.
@@ -122,5 +123,5 @@ FILE_COUNT = 5
 ; block 4
 .byte $04
 .segment "FILE4_DAT"
-.res $1000
+.res $2000
 

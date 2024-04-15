@@ -11,41 +11,38 @@ Reset:
 		and #$f7										; and set for vertical mirroring
 		sta FDS_CTRL
 		
-		jsr InitMemory
+		lda #$00										; clear RAM
+		tax
+@clrmem:
+		sta $00,x
+		cpx #4											; preserve BIOS stack variables at $0100~$0103
+		bcc :+
+		sta $100,x
+:
+		sta $200,x
+		sta $300,x
+		sta $400,x
+		sta $500,x
+		sta $600,x
+		sta $700,x
+		inx
+		bne @clrmem
 		jsr InitNametables
 		
 		lda #$fd										; set VRAM buffer size to max value ($0302~$03ff)
 		sta VRAM_BUFFER_SIZE
-		
-		lda #%00011110									; enable sprites/background and queue it for next NMI
-		jsr UpdatePPUMask
 		
 		lda #%10000000									; enable NMIs & change background pattern map access
 		sta PPU_CTRL
 		sta PPU_CTRL_MIRROR
 		
 Main:
-		jsr SetBGMode
-		lda DisplayToggle
-		beq :+
-		
-		jsr TimerLogic
-		jsr RNGLogic
-		
-:
+		jsr ProcessBGMode
 		inc NMIReady
-		
 :
 		lda NMIReady									; the usual NMI wait loop
 		bne :-
-
-		inc FrameCount									; increment frame timer after NMI
-		bne :+
-		
-		inc FrameCount+1
-		
-:
-		jmp Main										; back to main loop
+		beq Main										; back to main loop
 
 ; "NMI" routine which is entered to bypass the BIOS check
 Bypass:
@@ -84,15 +81,10 @@ NonMaskableInterrupt:
 		lda NMIReady									; check if ready to do NMI logic (i.e. not a lag frame)
 		beq NotReady
 		
-		jsr SpriteDMA
-		
 		lda NeedDraw									; transfer Data to PPU if required
 		beq :+
 		
-		jsr VRAMStructWrite
-Struct:
-	.word BGData										; this can be overwritten
-		
+		jsr WriteVRAMBuffer								; transfer data from VRAM buffer at $0302
 		jsr SetScroll									; reset scroll after PPUADDR writes
 		dec NeedDraw
 		
@@ -106,7 +98,7 @@ Struct:
 
 :
 		dec NMIReady
-		jsr ReadOrDownVerifyPads						; read controllers + expansion port (DMC safe, somehow...)
+		jsr ReadOrDownPads								; read controllers + expansion port
 
 NotReady:
 		jsr SetScroll									; remember to set scroll on lag frames
@@ -117,7 +109,7 @@ NotReady:
 		tax
 		pla
 		
-		dec NMIRunning									; clear flag for NMI in progres before exiting
+		dec NMIRunning									; clear flag for NMI in progress before exiting
 		rti
 		
 ; IRQ handler (unused for now)
@@ -130,26 +122,6 @@ UpdatePPUMask:
 		sta NeedPPUMask
 		rts
 
-MoveSpritesOffscreen:
-		lda #$ff										; fill OAM buffer with $ff to move offscreen
-		ldx #$02
-		ldy #$02
-		jmp MemFill
-
-InitMemory:
-		lda #$00
-		tax
-		
-:
-		sta $00,x										; clear $00~$f0
-		inx
-		cpx #$f1
-		bne :-
-		
-		ldx #$02										; clear RAM from $0200 (prevent OAM decay on reset)
-		ldy #$07										; up to and including $0700
-		jmp MemFill
-
 InitNametables:
 		lda #$20										; top-left
 		jsr InitNametable
@@ -159,66 +131,6 @@ InitNametable:
 		ldx #$00										; clear nametable & attributes for high address held in A
 		ldy #$00
 		jmp VRAMFill
-
-TimerLogic:												; convert frame timer to hex chars
-		lda FrameCount+1
-		jsr NumToChars
-		stx Frames
-		sty Frames+1
-		lda FrameCount
-		jsr NumToChars
-		stx Frames+2
-		sty Frames+3
-		rts
-
-; AX+ TinyRand8
-; https://codebase64.org/doku.php?id=base:ax_tinyrand8
-Rand8:
-	RAND_=*+1
-		lda #35
-		asl
-	RAND=*+1
-		eor #53
-		sta RAND_
-		adc RAND
-		sta RAND
-		rts
-
-SetSeed:
-		lda FrameCount
-		and #217
-		clc
-		adc #<21263
-		sta RAND
-		lda FrameCount
-		and #255-217
-		adc #>21263
-		sta RAND_
-		rts
-
-RNGLogic:
-		ldx RAND
-		lda P1_PRESSED									; seed RNG with frame count if Start pressed
-		and #BUTTON_START
-		beq :+
-
-		jsr SetSeed
-		
-:
-		lda P1_PRESSED									; get RNG number if B pressed
-		and #BUTTON_B
-		beq :+
-		
-		jsr Rand8
-		tax
-		
-:
-		txa
-		jsr NumToChars
-		stx RNG
-		sty RNG+1
-		rts
-
 
 NumToChars:												; converts A into hex chars and puts them in X/Y
 		pha
@@ -284,51 +196,86 @@ BIOSRevs1:
 BIOSRevs2:
 	.byte " A  "
 
-SetBGMode:
-		ldx BGMode										; BG mode 0 = palette + initial text, draw immediately
-		bne :+
+EnableRendering:
+		lda #%00001010									; enable background and queue it for next NMI
+	.byte $2c											; [skip 2 bytes]
 		
-		jsr CheckBIOS
-		ldx #$00
-		jsr DrawBG
-		inc BGMode
-		rts
-		
+DisableRendering:
+		lda #%00000000									; disable background and queue it for next NMI
+		jmp UpdatePPUMask
+
+WaitForNMI:
+		inc NMIReady
 :
-		lda P1_PRESSED									; otherwise toggle BG modes 1/2 via Select press
-		and #BUTTON_SELECT
-		beq DrawBG										; skip toggle if not pressed
-		
-		lda DisplayToggle								; toggle BG mode and transfer to X
-		eor #$01
-		sta DisplayToggle
-		tax
-		inx
-
-DrawBG:
-		lda StructAddrsLo,x								; index into LUT and set Struct address in NMI handler
-		sta Struct
-		lda StructAddrsHi,x
-		sta Struct+1
-		
-		lda #$01										; queue the VRAM transfer
-		sta NeedDraw
-		stx BGMode
+		lda NMIReady
+		bne :-
 		rts
 
-StructAddrsLo:
-	.lobytes BGData, BlankData, NumData
-	
-StructAddrsHi:
-	.hibytes BGData, BlankData, NumData
+; Jump table for main logic
+ProcessBGMode:
+		lda BGMode
+		jsr JumpEngine
+	.addr BGInit
+	.addr DumperPrep
+	.addr DumpBIOS
+	.addr DumpSuccess
+	.addr DoNothing
+
+; Initialise background to display the program name and FDS BIOS revision
+BGInit:
+		jsr CheckBIOS
+		jsr DisableRendering
+		jsr WaitForNMI
+		jsr VRAMStructWrite
+	.addr BGData
+		inc BGMode
+		jmp EnableRendering								; remember to enable rendering for the next NMI
+
+; Show a prompt to insert a disk if nothing is in the drive
+DumperPrep:
+		rts
+
+; Dump the BIOS to a disk file & show error messages if necessary
+DumpBIOS:
+		rts
+
+; Display a success message
+DumpSuccess:
+		lda #$21
+		ldx #$8A
+		ldy #SuccessMsgLength
+		jsr PrepareVRAMString
+	.addr SuccessMsg
+		sta StringStatus								; save status to check later
+		inc BGMode										; next mode
+		lda #$01										; queue VRAM transfer for next NMI
+		sta NeedDraw
+		rts
+
+SuccessMsg:
+	.byte "BIOS dumped!"
+SuccessMsgLength=*-SuccessMsg
+
+; Once the dump is done, stay in this state forever
+DoNothing:
+		rts
 
 BGData:													; VRAM transfer structure
 Palettes:
 	.byte $3f, $00										; destination address (BIG endian)
 	.byte %00000000 | PaletteSize						; d7=increment mode (+1), d6=transfer mode (copy), length
-	
+
+; Just write to all of the entries so PPUADDR safely leaves the palette RAM region
+; (palette entries will never be changed anyway, so we might as well set them all)
 PaletteData:
 	.byte $0f, $00, $10, $20
+	.byte $0f, $00, $10, $20
+	.byte $0f, $00, $10, $20
+	.byte $0f, $00, $10, $20
+	.byte $0f, $00, $10, $20
+	.byte $0f, $00, $10, $20
+	.byte $0f, $00, $10, $20
+	.byte $0f, $00, $10, $20 ; PPUADDR ends at $3F20 before the next write (avoids rare palette corruption)
 PaletteSize=*-PaletteData
 
 TextData:
@@ -347,32 +294,5 @@ Chars2:
 RevNum:
 	.byte "?? "
 Text2Length=*-Chars2
-	.byte $ff											; terminator
-
-BlankData:
-	.byte $20, $e9										; destination address (BIG endian)
-	.byte %01000000 | FramesLength						; d7=increment mode (+1), d6=transfer mode (fill), length
-	.byte " "
-	.byte $21, $09										; destination address (BIG endian)
-	.byte %01000000 | RNGLength							; d7=increment mode (+1), d6=transfer mode (fill), length
-	.byte " "
-	.byte $ff											; terminator
-
-NumData:
-	.byte $20, $e9										; destination address (BIG endian)
-	.byte %00000000 | FramesLength						; d7=increment mode (+1), d6=transfer mode (copy), length
-FramesChars:
-	.byte "Frames = "
-Frames:
-	.byte "0000"
-FramesLength=*-FramesChars
-
-	.byte $21, $09										; destination address (BIG endian)
-	.byte %00000000 | RNGLength							; d7=increment mode (+1), d6=transfer mode (copy), length
-RNGChars:
-	.byte "Random =  "
-RNG:
-	.byte "00"
-RNGLength=*-RNGChars
 	.byte $ff											; terminator
 

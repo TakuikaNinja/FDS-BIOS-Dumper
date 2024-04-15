@@ -7,7 +7,7 @@ OBJ_FILES=bios-dumper.o
 all: $(GAME).fds
 
 $(GAME).fds : $(OBJ_FILES)  $(GAME).cfg
-	$(LINKER) -o $(GAME).fds -C $(GAME).cfg $(OBJ_FILES) -m $(GAME).map.txt -Ln $(GAME).labels.txt --dbgfile $(GAME).fds.dbg
+	$(LINKER) -o $(GAME).fds -C $(GAME).cfg $(OBJ_FILES) -m $(GAME).map.txt -Ln $(GAME).labels.txt --dbgfile $(GAME).dbg
 
 clean:
 	rm -f *.o *.fds *.dbg *.nl *.map.txt *.labels.txt
