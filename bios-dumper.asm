@@ -109,19 +109,19 @@ FILE_COUNT = 5
 .byte $80 ; enable NMI byte sent to PPU_CTRL
 
 ; This block will never be loaded but it is large enough for an NMI to trigger
-; while seeking the disk on boot-up.
+; while seeking the disk on boot-up. Also acts as the file to store the BIOS dump.
 .segment "FILE4_HDR"
 ; block 3
 .import __FILE4_DAT_SIZE__
 .import __FILE4_DAT_RUN__
 .byte $03
 .byte 4,$FF
-.byte "-BYPASS-"
+.byte "DISKSYS-"
 .word __FILE4_DAT_RUN__
 .word __FILE4_DAT_SIZE__
 .byte 0 ; PRG
 ; block 4
 .byte $04
 .segment "FILE4_DAT"
-.res $2000
+.res $2000, $FF ; fill with $FF to make it easier to find within the disk
 

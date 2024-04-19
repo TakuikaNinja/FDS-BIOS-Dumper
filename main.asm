@@ -116,6 +116,13 @@ NotReady:
 InterruptRequest:
 		rti
 
+EnableRendering:
+		lda #%00001010									; enable background and queue it for next NMI
+	.byte $2c											; [skip 2 bytes]
+		
+DisableRendering:
+		lda #%00000000									; disable background and queue it for next NMI
+
 UpdatePPUMask:
 		sta PPU_MASK_MIRROR
 		lda #$01
@@ -196,14 +203,6 @@ BIOSRevs1:
 BIOSRevs2:
 	.byte " A  "
 
-EnableRendering:
-		lda #%00001010									; enable background and queue it for next NMI
-	.byte $2c											; [skip 2 bytes]
-		
-DisableRendering:
-		lda #%00000000									; disable background and queue it for next NMI
-		jmp UpdatePPUMask
-
 WaitForNMI:
 		inc NMIReady
 :
@@ -216,7 +215,7 @@ ProcessBGMode:
 		lda BGMode
 		jsr JumpEngine
 	.addr BGInit
-	.addr DumperPrep
+	.addr DumpPrep
 	.addr DumpBIOS
 	.addr DumpSuccess
 	.addr DoNothing
@@ -231,18 +230,103 @@ BGInit:
 		inc BGMode
 		jmp EnableRendering								; remember to enable rendering for the next NMI
 
-; Show a prompt to insert a disk if nothing is in the drive
-DumperPrep:
+; Print a message before dumping the BIOS
+DumpPrep:
+		lda #$21
+		ldx #$8A
+		ldy #PrepMsgLength
+		jsr PrepareVRAMString
+	.addr PrepMsg
+		sta StringStatus								; save status to check later
+		inc BGMode										; next mode
+		lda #$01										; queue VRAM transfer for next NMI
+		sta NeedDraw
 		rts
+
+PrepMsg:
+	.byte "Dumping..."
+PrepMsgLength=*-PrepMsg
 
 ; Dump the BIOS to a disk file & show error messages if necessary
 DumpBIOS:
+		lda #$04										; write to file number 4
+		jsr WriteFile
+	.addr DiskID
+	.addr FileHeader
+		bne PrintError
+		
+		inc BGMode										; go to next mode on successful write
 		rts
+
+; Print the error message and wait for an inserted disk before retrying
+PrintError:
+		jsr NumToChars
+		stx ErrorNum
+		sty ErrorNum+1
+		lda #$21
+		ldx #$95
+		ldy #ErrorMsgLength
+		jsr PrepareVRAMString
+	.addr ErrorMsg
+		sta StringStatus								; save status to check later
+		lda #$01										; queue VRAM transfer for next NMI
+		sta NeedDraw
+		jsr WaitForNMI
+		
+SideError:
+		lda FDS_DRIVE_STATUS
+		and #$01
+		beq SideError									; wait until disk is ejected
+
+Insert:
+		lda FDS_DRIVE_STATUS
+		and #$01
+		bne Insert										; wait until disk is inserted
+		
+		lda #$21										; clear error message
+		ldx #$95
+		ldy #BlankMsgLength
+		jsr PrepareVRAMString
+	.addr BlankMsg
+		sta StringStatus								; save status to check later
+		lda #$01										; queue VRAM transfer for next NMI
+		sta NeedDraw
+		jsr WaitForNMI
+		jmp DumpBIOS									; then retry the file write
+
+BlankMsg:
+	.byte "       "
+BlankMsgLength=*-BlankMsg
+
+ErrorMsg:
+	.byte "Err. "
+ErrorNum:
+	.byte "00"
+ErrorMsgLength=*-ErrorMsg
+
+DiskID:
+	.byte $00 ; manufacturer
+	.byte "DUM" ; yes, I know...
+	.byte $20 ; normal disk
+	.byte $00 ; game version
+	.byte $00 ; side
+	.byte $00 ; disk
+	.byte $00 ; disk type
+	.byte $00 ; unknown
+
+FileHeader:
+	.byte $FF
+	.byte "DISKSYS-"
+	.word __FILE4_DAT_RUN__
+	.word __FILE4_DAT_SIZE__
+	.byte 0 ; PRG
+	.word __FILE4_DAT_RUN__
+	.byte $00
 
 ; Display a success message
 DumpSuccess:
 		lda #$21
-		ldx #$8A
+		ldx #$95
 		ldy #SuccessMsgLength
 		jsr PrepareVRAMString
 	.addr SuccessMsg
@@ -253,7 +337,7 @@ DumpSuccess:
 		rts
 
 SuccessMsg:
-	.byte "BIOS dumped!"
+	.byte "OK!"
 SuccessMsgLength=*-SuccessMsg
 
 ; Once the dump is done, stay in this state forever
