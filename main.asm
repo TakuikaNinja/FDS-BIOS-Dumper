@@ -27,11 +27,12 @@ Reset:
 		sta $700,x
 		inx
 		bne @clrmem
+		jsr InitFileHeader
 		jsr InitNametables
 		
 		lda #$fd										; set VRAM buffer size to max value ($0302~$03ff)
 		sta VRAM_BUFFER_SIZE
-		
+
 		lda #%10000000									; enable NMIs & change background pattern map access
 		sta PPU_CTRL
 		sta PPU_CTRL_MIRROR
@@ -249,13 +250,29 @@ PrepMsgLength=*-PrepMsg
 
 ; Dump the BIOS to a disk file & show error messages if necessary
 DumpBIOS:
-		lda #$04										; write to file number 4
+		lda FileNum
 		jsr WriteFile
 	.addr DiskID
 	.addr FileHeader
 		bne PrintError
-		
-		inc BGMode										; go to next mode on successful write
+		lda FileNum
+		cmp #$0B			; check if dump all done
+		beq end_of_dump_bios; end loop
+		clc
+		adc #$01
+		sta FileNum			; update file number
+		ldx #$08
+		inc FileHeader,x	; update file name
+		ldx #$0C
+		lda FileHeader,x	; get size
+		ldx #$0A
+		adc FileHeader,x
+		sta FileHeader,x	; update start addr
+		ldx #$0F
+		sta FileHeader,x	; update start addr
+		jmp DumpBIOS
+end_of_dump_bios:
+		inc BGMode			; go to next mode on successful write
 		rts
 
 ; Print the error message and wait for an inserted disk before retrying
@@ -294,6 +311,19 @@ Insert:
 		jsr WaitForNMI
 		jmp DumpBIOS									; then retry the file write
 
+InitFileHeader:
+		ldx #$00
+init_file_header_0:
+		lda FileHeaderR,x
+		sta FileHeader,x
+		inx
+		cpx #$11
+		bcc init_file_header_0
+		lda #$04
+		sta FileNum
+		rts
+
+
 BlankMsg:
 	.byte "       "
 BlankMsgLength=*-BlankMsg
@@ -314,9 +344,9 @@ DiskID:
 	.byte $00 ; disk type
 	.byte $00 ; unknown
 
-FileHeader:
+FileHeaderR:
 	.byte $FF
-	.byte "DISKSYS-"
+	.byte "DISKSYS0"
 	.word __FILE4_DAT_RUN__
 	.word __FILE4_DAT_SIZE__
 	.byte 0 ; PRG
