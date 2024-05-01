@@ -64,17 +64,14 @@ Bypass:
 		
 ; NMI handler
 NonMaskableInterrupt:
-		pha												; back up A
-		lda NMIRunning									; exit if NMI is already in progress
-		beq :+
+		bit NMIRunning									; exit if NMI is already in progress
+		bmi NoNMI
 		
-		pla
-		rti
-
-:
-		inc NMIRunning									; set flag for NMI in progress
+		sec
+		ror NMIRunning									; set flag for NMI in progress
 		
-		txa												; back up X/Y
+		pha												; back up A/X/Y
+		txa
 		pha
 		tya
 		pha
@@ -110,7 +107,9 @@ NotReady:
 		tax
 		pla
 		
-		dec NMIRunning									; clear flag for NMI in progress before exiting
+		asl NMIRunning									; clear flag for NMI in progress before exiting
+		
+NoNMI:
 		rti
 		
 ; IRQ handler (unused for now)
@@ -248,32 +247,41 @@ PrepMsg:
 	.byte "Dumping..."
 PrepMsgLength=*-PrepMsg
 
-; Dump the BIOS to a disk file & show error messages if necessary
+; Dump the BIOS to 1KiB disk files & show error messages if necessary
 DumpBIOS:
-		lda FileNum
+		jsr VINTWait									; wait a frame and disable NMIs just to be safe
+		lda FileNum										; this should resume after the last valid file
 		jsr WriteFile
 	.addr DiskID
 	.addr FileHeader
 		bne PrintError
+		
 		lda FileNum
-		cmp #$0B			; check if dump all done
-		beq end_of_dump_bios; end loop
-		clc
-		adc #$01
-		sta FileNum			; update file number
+		cmp #$0B										; check if dump all done
+		beq FinishDump									; end loop
+		
+		inc FileNum										; update file number
 		ldx #$08
-		inc FileHeader,x	; update file name
+		inc FileHeader,x								; update file name
 		ldx #$0C
-		lda FileHeader,x	; get size
+		lda FileHeader,x								; get size
 		ldx #$0A
 		adc FileHeader,x
-		sta FileHeader,x	; update start addr
+		sta FileHeader,x								; update start addr
 		ldx #$0F
-		sta FileHeader,x	; update start addr
-		jmp DumpBIOS
-end_of_dump_bios:
-		inc BGMode			; go to next mode on successful write
-		rts
+		sta FileHeader,x								; update start addr
+		bne DumpBIOS									; [unconditional branch]
+		
+FinishDump:
+		inc BGMode										; go to next mode on successful write
+		
+EnableNMI:
+		lda PPU_CTRL_MIRROR								; enable NMI
+		ora #%10000000
+		bit PPU_STATUS									; in case this was called with the vblank flag set
+		sta PPU_CTRL
+		sta PPU_CTRL_MIRROR
+		jmp WaitForNMI
 
 ; Print the error message and wait for an inserted disk before retrying
 PrintError:
@@ -288,7 +296,7 @@ PrintError:
 		sta StringStatus								; save status to check later
 		lda #$01										; queue VRAM transfer for next NMI
 		sta NeedDraw
-		jsr WaitForNMI
+		jsr EnableNMI									; but enable NMI first
 		
 SideError:
 		lda FDS_DRIVE_STATUS
@@ -312,13 +320,12 @@ Insert:
 		jmp DumpBIOS									; then retry the file write
 
 InitFileHeader:
-		ldx #$00
-init_file_header_0:
+		ldx #$10
+@loop:
 		lda FileHeaderR,x
 		sta FileHeader,x
-		inx
-		cpx #$11
-		bcc init_file_header_0
+		dex
+		bpl @loop
 		lda #$04
 		sta FileNum
 		rts
