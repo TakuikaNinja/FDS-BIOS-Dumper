@@ -1,12 +1,13 @@
 # FDS BIOS Dumper
 
-This program dumps the FDS BIOS ROM (8KiB) onto a disk.
+This program dumps the FDS BIOS ROM (8KiB) onto a disk in 1KiB file blocks.
 Now you can legally obtain a dump from original hardware!
 
 ## Usage
 
 Simply boot the program (from a real disk or a drive emulator) and it will automatically dump the BIOS onto a disk.
-Should any issues occur, an error message/code will be displayed.
+Should any issues occur, an error message/code will be displayed. Make a note of the error number and reinsert the disk.
+The program will retry from the 1KiB file block it failed on.
 
 ## Building
 

@@ -116,12 +116,11 @@ FILE_COUNT = 5
 .import __FILE4_DAT_RUN__
 .byte $03
 .byte 4,$FF
-.byte "DISKSYS-"
+.byte "DISKSYS0"
 .word __FILE4_DAT_RUN__
 .word __FILE4_DAT_SIZE__
 .byte 0 ; PRG
 ; block 4
 .byte $04
 .segment "FILE4_DAT"
-.res $2000, $FF ; fill with $FF to make it easier to find within the disk
-
+.res $0400, $FF ; fill with $FF to make it easier to find within the disk

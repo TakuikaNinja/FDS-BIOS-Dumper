@@ -9,6 +9,8 @@
 	NeedPPUMask: .res 1
 	BGMode: .res 1
 	StringStatus: .res 1
+	FileHeader: .res 17
+	FileNum: .res 1
 
 ; BIOS zeropage variables
 .segment "BIOSZP": zeropage
