@@ -65,7 +65,7 @@ Bypass:
 ; NMI handler
 NonMaskableInterrupt:
 		bit NMIRunning									; exit if NMI is already in progress
-		bmi NoNMI
+		bmi InterruptRequest
 		
 		sec
 		ror NMIRunning									; set flag for NMI in progress
@@ -108,9 +108,6 @@ NotReady:
 		pla
 		
 		asl NMIRunning									; clear flag for NMI in progress before exiting
-		
-NoNMI:
-		rti
 		
 ; IRQ handler (unused for now)
 InterruptRequest:
@@ -159,31 +156,23 @@ NybbleToChar:
 	.byte "0123456789ABCDEF"
 
 CheckBIOS:
+		lda $f5b6										; number in hidden "DEV.NO.2" string (01A/02)
 		clc
-		lda $fff9
-		adc $fffc
-		ldx #$00
-		cmp #$17										; rev0: $00 + $17
+		adc $fff9										; final byte before CPU vectors
+		clc
+		adc $fffc										; reset vector low byte
+		clc
+		adc $f6b6										; distinguishing byte from the logo screen data
+		
+		ldx #$02										; check against 3 results
+CheckLoop:
+		cmp BIOSChecksums,x
 		beq SaveRev
 		
-		inx
-		cmp #$25										; rev1/twin: $01 + $24
-		beq CheckTwin
+		dex
+		bpl CheckLoop
 		
-		inx
-		bne UnknownRev
-
-CheckTwin:
-		lda $f6b6										; load a byte from the logo screen data
-		cmp #$28										; check for presence of trademark symbol (rev1)
-		beq SaveRev
-		
-		inx
-		cmp #$24										; check for presence of space (twin)
-		beq SaveRev
-
-UnknownRev:
-		inx
+		ldx #$03										; unknown revision
 		
 SaveRev:
 		lda BIOSRevs0,x
@@ -193,6 +182,12 @@ SaveRev:
 		lda BIOSRevs2,x
 		sta RevNum+2
 		rts
+
+; this list contains the correct checksums for this scheme
+BIOSChecksums:
+	.byte ($17 + $00 + $17 + $24)
+	.byte ($02 + $01 + $24 + $28)
+	.byte ($02 + $01 + $24 + $24)
 
 ; these LUTs construct the BIOS revision string found on 2C33 markings
 ; "01 ", "01A", "02 " are official, "?? " is unknown/unofficial
