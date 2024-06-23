@@ -155,48 +155,82 @@ NumToChars:												; converts A into hex chars and puts them in X/Y
 NybbleToChar:
 	.byte "0123456789ABCDEF"
 
+; uses CRC32 calculation routine from https://www.nesdev.org/wiki/Calculate_CRC32
 CheckBIOS:
-		lda $f5b6										; number in hidden "DEV.NO.2" string (01A/02)
-		clc
-		adc $fff9										; final byte before CPU vectors
-		clc
-		adc $fffc										; reset vector low byte
-		clc
-		adc $f6b6										; distinguishing byte from the logo screen data
+		lda #$00										; init pointer
+		sta BIOSPtr
+		tay
+		lda #$e0
+		sta BIOSPtr+1
 		
-		ldx #$02										; check against 3 results
-CheckLoop:
-		cmp BIOSChecksums,x
-		beq SaveRev
-		
+@crc32init:
+		ldx #3
+		lda #$ff
+@c3il:
+		sta testcrc+0,x
 		dex
-		bpl CheckLoop
+		bpl @c3il
 		
-		ldx #$03										; unknown revision
-		
-SaveRev:
-		lda BIOSRevs0,x
-		sta RevNum
-		lda BIOSRevs1,x
-		sta RevNum+1
-		lda BIOSRevs2,x
-		sta RevNum+2
+@CalcCRC32:
+		lda (BIOSPtr),y
+@crc32:
+		ldx #8
+		eor testcrc+0
+		sta testcrc+0
+@c32l:
+		lsr testcrc+3
+		ror testcrc+2
+		ror testcrc+1
+		ror testcrc+0
+		bcc @dc32
+		lda #$ed
+		eor testcrc+3
+		sta testcrc+3
+		lda #$b8
+		eor testcrc+2
+		sta testcrc+2
+		lda #$83
+		eor testcrc+1
+		sta testcrc+1
+		lda #$20
+		eor testcrc+0
+		sta testcrc+0
+@dc32:
+		dex
+		bne @c32l
+
+		inc BIOSPtr
+		bne :+
+		inc BIOSPtr+1
+:
+		bne @CalcCRC32									; will fall through once BIOSPtr == $0000
+
+@crc32end:
+		ldx #3
+@c3el:
+		lda #$ff
+		eor testcrc+0,x
+		sta testcrc+0,x
+		dex
+		bpl @c3el
+
+		lda testcrc+3
+		jsr NumToChars
+		stx CRC32+0
+		sty CRC32+1
+		lda testcrc+2
+		jsr NumToChars
+		stx CRC32+2
+		sty CRC32+3
+		lda testcrc+1
+		jsr NumToChars
+		stx CRC32+4
+		sty CRC32+5
+		lda testcrc+0
+		jsr NumToChars
+		stx CRC32+6
+		sty CRC32+7
 		rts
-
-; this list contains the correct checksums for this scheme
-BIOSChecksums:
-	.byte ($17 + $00 + $17 + $24)
-	.byte ($02 + $01 + $24 + $28)
-	.byte ($02 + $01 + $24 + $24)
-
-; these LUTs construct the BIOS revision string found on 2C33 markings
-; "01 ", "01A", "02 " are official, "?? " is unknown/unofficial
-BIOSRevs0:
-	.byte "000?"
-BIOSRevs1:
-	.byte "112?"
-BIOSRevs2:
-	.byte " A  "
 
 WaitForNMI:
 		inc NMIReady
@@ -402,13 +436,13 @@ Chars1:
 	.byte "FDS-BIOS-Dumper"
 Text1Length=*-Chars1
 
-	.byte $20, $aa										; destination address (BIG endian)
+	.byte $20, $a9										; destination address (BIG endian)
 	.byte %00000000 | Text2Length						; d7=increment mode (+1), d6=transfer mode (copy), length
 	
 Chars2:
-	.byte "BIOS Rev. "
-RevNum:
-	.byte "?? "
+	.byte "CRC32: "
+CRC32:
+	.byte "FFFFFFFF"
 Text2Length=*-Chars2
 	.byte $ff											; terminator
 

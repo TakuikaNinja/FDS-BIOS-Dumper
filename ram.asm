@@ -11,6 +11,8 @@
 	StringStatus: .res 1
 	FileHeader: .res 17
 	FileNum: .res 1
+	BIOSPtr: .res 2
+	testcrc: .res 4
 
 ; BIOS zeropage variables
 .segment "BIOSZP": zeropage
