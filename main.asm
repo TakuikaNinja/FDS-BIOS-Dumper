@@ -39,10 +39,7 @@ Reset:
 		
 Main:
 		jsr ProcessBGMode
-		inc NMIReady
-:
-		lda NMIReady									; the usual NMI wait loop
-		bne :-
+		jsr WaitForNMI
 		beq Main										; back to main loop
 
 ; "NMI" routine which is entered to bypass the BIOS check
@@ -308,9 +305,9 @@ EnableNMI:
 		lda PPU_CTRL_MIRROR								; enable NMI
 		ora #%10000000
 		bit PPU_STATUS									; in case this was called with the vblank flag set
+		sta PPU_CTRL_MIRROR								; write to mirror first for thread safety
 		sta PPU_CTRL
-		sta PPU_CTRL_MIRROR
-		jmp WaitForNMI
+		rts
 
 ; Print the error message and wait for an inserted disk before retrying
 PrintError:
@@ -326,6 +323,7 @@ PrintError:
 		lda #$01										; queue VRAM transfer for next NMI
 		sta NeedDraw
 		jsr EnableNMI									; but enable NMI first
+		jsr WaitForNMI
 		
 SideError:
 		lda FDS_DRIVE_STATUS
