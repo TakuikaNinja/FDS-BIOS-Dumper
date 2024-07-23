@@ -2,7 +2,7 @@ GAME=bios-dumper
 ASSEMBLER=ca65
 LINKER=ld65
 
-OBJ_FILES=bios-dumper.o
+OBJ_FILES=$(GAME).o
 
 all: $(GAME).fds
 
