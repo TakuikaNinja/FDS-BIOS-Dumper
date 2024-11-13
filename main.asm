@@ -7,9 +7,9 @@
 
 ; reset handler
 Reset:
-		lda FDS_CTRL_MIRROR								; get setting previously used by FDS BIOS
-		and #$f7										; and set for vertical mirroring
-		sta FDS_CTRL
+;		lda FDS_CTRL_MIRROR								; get setting previously used by FDS BIOS
+;		and #$f7										; and set for vertical mirroring
+;		sta FDS_CTRL
 		
 		lda #$00										; clear RAM
 		tax
