@@ -1,16 +1,12 @@
-; main program code
+; Main program code
 ;
 ; Formatting:
 ; - Width: 132 Columns
 ; - Tab Size: 4, using tab
 ; - Comments: Column 57
 
-; reset handler
+; Reset handler
 Reset:
-;		lda FDS_CTRL_MIRROR								; get setting previously used by FDS BIOS
-;		and #$f7										; and set for vertical mirroring
-;		sta FDS_CTRL
-		
 		lda #$00										; clear RAM
 		tax
 @clrmem:
@@ -152,7 +148,7 @@ NumToChars:												; converts A into hex chars and puts them in X/Y
 NybbleToChar:
 	.byte "0123456789ABCDEF"
 
-; uses CRC32 calculation routine from https://www.nesdev.org/wiki/Calculate_CRC32
+; Uses CRC32 calculation routine from https://www.nesdev.org/wiki/Calculate_CRC32
 CheckBIOS:
 		lda #$00										; init pointer
 		sta BIOSPtr
@@ -231,13 +227,21 @@ CheckBIOS:
 
 ; VRAM sub-structure to store CRC32 result
 CRC32Struct:
-	big_endian $20b0
-	encode_length INC1, COPY, 8
+	.dbyt $20b0
+	encode_length INC1, COPY, CRC32Length
 	
-CRC32:
-	.byte "FFFFFFFF"
+	define_string CRC32, "FFFFFFFF"
+	CRC32Length = .sizeof(CRC32)
 	
 	encode_return
+
+; String data, placed before anything which uses .sizeof()
+Strings:
+	define_string PrepMsg, "Dumping..."
+	define_string BlankMsg, "       "
+	define_string ErrorMsg, "Err. "
+	define_string ErrorNum, "00"
+	define_string SuccessMsg, "OK!"
 
 WaitForNMI:
 		inc NMIReady
@@ -268,20 +272,12 @@ BGInit:
 
 ; Print a message before dumping the BIOS
 DumpPrep:
-		lda #$21
-		ldx #$8A
-		ldy #PrepMsgLength
-		jsr PrepareVRAMString
-	.addr PrepMsg
+		prep_vram_string $218A, PrepMsg
 		sta StringStatus								; save status to check later
 		inc BGMode										; next mode
 		lda #$01										; queue VRAM transfer for next NMI
 		sta NeedDraw
 		rts
-
-PrepMsg:
-	.byte "Dumping..."
-PrepMsgLength=*-PrepMsg
 
 ; Dump the BIOS to 1KiB disk files & show error messages if necessary
 DumpBIOS:
@@ -324,11 +320,7 @@ PrintError:
 		jsr NumToChars
 		stx ErrorNum
 		sty ErrorNum+1
-		lda #$21
-		ldx #$95
-		ldy #ErrorMsgLength
-		jsr PrepareVRAMString
-	.addr ErrorMsg
+		prep_vram_string $2195, ErrorMsg
 		sta StringStatus								; save status to check later
 		lda #$01										; queue VRAM transfer for next NMI
 		sta NeedDraw
@@ -345,11 +337,7 @@ Insert:
 		and #$01
 		bne Insert										; wait until disk is inserted
 		
-		lda #$21										; clear error message
-		ldx #$95
-		ldy #BlankMsgLength
-		jsr PrepareVRAMString
-	.addr BlankMsg
+		prep_vram_string $2195, BlankMsg				; clear error message
 		sta StringStatus								; save status to check later
 		lda #$01										; queue VRAM transfer for next NMI
 		sta NeedDraw
@@ -366,17 +354,6 @@ InitFileHeader:
 		lda #$04
 		sta FileNum
 		rts
-
-
-BlankMsg:
-	.byte "       "
-BlankMsgLength=*-BlankMsg
-
-ErrorMsg:
-	.byte "Err. "
-ErrorNum:
-	.byte "00"
-ErrorMsgLength=*-ErrorMsg
 
 DiskID:
 	.byte $00 ; manufacturer
@@ -399,20 +376,12 @@ FileHeaderR:
 
 ; Display a success message
 DumpSuccess:
-		lda #$21
-		ldx #$95
-		ldy #SuccessMsgLength
-		jsr PrepareVRAMString
-	.addr SuccessMsg
+		prep_vram_string $2195, SuccessMsg
 		sta StringStatus								; save status to check later
 		inc BGMode										; next mode
 		lda #$01										; queue VRAM transfer for next NMI
 		sta NeedDraw
 		rts
-
-SuccessMsg:
-	.byte "OK!"
-SuccessMsgLength=*-SuccessMsg
 
 ; Once the dump is done, stay in this state forever
 DoNothing:
@@ -422,19 +391,24 @@ DoNothing:
 BGData:
 
 ; Just write to all 16 entries so PPUADDR safely leaves the palette RAM region
+; PPUADDR ends at $3F20 before the next write (avoids rare palette corruption)
 ; (palette entries will never be changed anyway, so we might as well set them all)
 Palettes:
-	big_endian $3f00
-	encode_length INC1, COPY, 16
+	.dbyt $3f00
+	encode_length INC1, COPY, PaletteDataSize
+
+.proc PaletteData
 	.repeat 4
 	.byte $0f, $00, $10, $20
-	.endrepeat ; PPUADDR ends at $3F20 before the next write (avoids rare palette corruption)
+	.endrepeat
+.endproc
+PaletteDataSize = .sizeof(PaletteData)
 
 TextData:
-	big_endian $2089
+	.dbyt $2089
 	encode_string INC1, COPY, "FDS-BIOS-Dumper"
 
-	big_endian $20a9
+	.dbyt $20a9
 	encode_string INC1, COPY, "CRC32:"
 	
 	encode_call CRC32Struct
