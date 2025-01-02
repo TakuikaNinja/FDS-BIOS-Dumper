@@ -15,10 +15,13 @@
 	BUTTON_RIGHT  = 1 << 0
 .endenum
 
-; VRAM struct flags
+; VRAM struct/buffer
 .enum
 	COPY = 0
 	FILL = 1
 	INC1 = 0
 	INC32 = 1
+	
+	; max VRAM buffer size ($0302~$03ff)
+	BUFFER_SIZE = $fd
 .endenum

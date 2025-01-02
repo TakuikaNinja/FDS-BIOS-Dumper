@@ -26,7 +26,7 @@ Reset:
 		jsr InitFileHeader
 		jsr InitNametables
 		
-		lda #$fd										; set VRAM buffer size to max value ($0302~$03ff)
+		lda #BUFFER_SIZE								; set VRAM buffer size
 		sta VRAM_BUFFER_SIZE
 
 		lda #%10000000									; enable NMIs & change background pattern map access
@@ -231,17 +231,8 @@ CRC32Struct:
 	encode_length INC1, COPY, CRC32Length
 	
 	define_string CRC32, "FFFFFFFF"
-	CRC32Length = .sizeof(CRC32)
 	
 	encode_return
-
-; String data, placed before anything which uses .sizeof()
-Strings:
-	define_string PrepMsg, "Dumping..."
-	define_string BlankMsg, "       "
-	define_string ErrorMsg, "Err. "
-	define_string ErrorNum, "00"
-	define_string SuccessMsg, "OK!"
 
 WaitForNMI:
 		inc NMIReady
@@ -272,7 +263,7 @@ BGInit:
 
 ; Print a message before dumping the BIOS
 DumpPrep:
-		prep_vram_string $218A, PrepMsg
+		vram_string $218A, PrepMsg, PrepMsgLength
 		sta StringStatus								; save status to check later
 		inc BGMode										; next mode
 		lda #$01										; queue VRAM transfer for next NMI
@@ -320,7 +311,7 @@ PrintError:
 		jsr NumToChars
 		stx ErrorNum
 		sty ErrorNum+1
-		prep_vram_string $2195, ErrorMsg
+		vram_string $2195, ErrorMsg, ErrorMsgLength
 		sta StringStatus								; save status to check later
 		lda #$01										; queue VRAM transfer for next NMI
 		sta NeedDraw
@@ -337,7 +328,7 @@ Insert:
 		and #$01
 		bne Insert										; wait until disk is inserted
 		
-		prep_vram_string $2195, BlankMsg				; clear error message
+		vram_string $2195, BlankMsg, BlankMsgLength		; clear error message
 		sta StringStatus								; save status to check later
 		lda #$01										; queue VRAM transfer for next NMI
 		sta NeedDraw
@@ -376,7 +367,7 @@ FileHeaderR:
 
 ; Display a success message
 DumpSuccess:
-		prep_vram_string $2195, SuccessMsg
+		vram_string $2195, SuccessMsg, SuccessMsgLength
 		sta StringStatus								; save status to check later
 		inc BGMode										; next mode
 		lda #$01										; queue VRAM transfer for next NMI
@@ -386,6 +377,14 @@ DumpSuccess:
 ; Once the dump is done, stay in this state forever
 DoNothing:
 		rts
+
+; String data
+Strings:
+	define_string PrepMsg, "Dumping..."
+	define_string BlankMsg, "       "
+	define_string ErrorMsg, "Err. "
+	define_string ErrorNum, "00"
+	define_string SuccessMsg, "OK!"
 
 ; VRAM transfer structure
 BGData:

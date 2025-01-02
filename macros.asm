@@ -1,19 +1,20 @@
 ; macros
 
-; place bytes + define a string label with working .sizeof() by abusing procedures
-; TODO: find a better method
+; place bytes + define a string label with length variable
 .macro define_string label, str
 	.proc label
 		.byte str
 	.endproc
+	.ident(.concat(.string(label), "Length")) = .sizeof(label)
 .endmacro
 
-; call PrepareVRAMString, assuming the label points to a string with .sizeof() working
-.macro prep_vram_string ppu16, addr16
-	.assert .sizeof(addr16) > 0 && .sizeof(addr16) < 256, error, "invalid string size"
+; call PrepareVRAMString with *constant* PPU address, source CPU address, and length values
+.macro vram_string ppu16, addr16, length
+	.assert length > 0, error, "invalid string size"
+	.assert length <= BUFFER_SIZE, warning, "string size exceeds buffer"
 	lda #>ppu16
 	ldx #<ppu16
-	ldy #(.sizeof(addr16))
+	ldy #length
 	jsr PrepareVRAMString
 	.addr addr16
 .endmacro
