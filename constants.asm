@@ -14,3 +14,11 @@
 	BUTTON_LEFT   = 1 << 1
 	BUTTON_RIGHT  = 1 << 0
 .endenum
+
+; VRAM struct flags
+.enum
+	COPY = 0
+	FILL = 1
+	INC1 = 0
+	INC32 = 1
+.endenum

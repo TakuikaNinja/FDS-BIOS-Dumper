@@ -229,6 +229,16 @@ CheckBIOS:
 		sty CRC32+7
 		rts
 
+; VRAM sub-structure to store CRC32 result
+CRC32Struct:
+	big_endian $20b0
+	encode_length INC1, COPY, 8
+	
+CRC32:
+	.byte "FFFFFFFF"
+	
+	encode_return
+
 WaitForNMI:
 		inc NMIReady
 :
@@ -408,39 +418,26 @@ SuccessMsgLength=*-SuccessMsg
 DoNothing:
 		rts
 
-BGData:													; VRAM transfer structure
-Palettes:
-	.byte $3f, $00										; destination address (BIG endian)
-	.byte %00000000 | PaletteSize						; d7=increment mode (+1), d6=transfer mode (copy), length
+; VRAM transfer structure
+BGData:
 
-; Just write to all of the entries so PPUADDR safely leaves the palette RAM region
+; Just write to all 16 entries so PPUADDR safely leaves the palette RAM region
 ; (palette entries will never be changed anyway, so we might as well set them all)
-PaletteData:
+Palettes:
+	big_endian $3f00
+	encode_length INC1, COPY, 16
+	.repeat 4
 	.byte $0f, $00, $10, $20
-	.byte $0f, $00, $10, $20
-	.byte $0f, $00, $10, $20
-	.byte $0f, $00, $10, $20
-	.byte $0f, $00, $10, $20
-	.byte $0f, $00, $10, $20
-	.byte $0f, $00, $10, $20
-	.byte $0f, $00, $10, $20 ; PPUADDR ends at $3F20 before the next write (avoids rare palette corruption)
-PaletteSize=*-PaletteData
+	.endrepeat ; PPUADDR ends at $3F20 before the next write (avoids rare palette corruption)
 
 TextData:
-	.byte $20, $89										; destination address (BIG endian)
-	.byte %00000000 | Text1Length						; d7=increment mode (+1), d6=transfer mode (copy), length
-	
-Chars1:
-	.byte "FDS-BIOS-Dumper"
-Text1Length=*-Chars1
+	big_endian $2089
+	encode_string INC1, COPY, "FDS-BIOS-Dumper"
 
-	.byte $20, $a9										; destination address (BIG endian)
-	.byte %00000000 | Text2Length						; d7=increment mode (+1), d6=transfer mode (copy), length
+	big_endian $20a9
+	encode_string INC1, COPY, "CRC32:"
 	
-Chars2:
-	.byte "CRC32: "
-CRC32:
-	.byte "FFFFFFFF"
-Text2Length=*-Chars2
-	.byte $ff											; terminator
+	encode_call CRC32Struct
+	
+	encode_terminator
 

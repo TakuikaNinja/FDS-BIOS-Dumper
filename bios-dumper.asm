@@ -1,6 +1,7 @@
 .include "defs.asm"
 .include "ram.asm"
 .include "constants.asm"
+.include "macros.asm"
 
 BOOT_ID = 4
 FILE_COUNT = 5
