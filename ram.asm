@@ -13,6 +13,7 @@
 	FileNum: .res 1
 	BIOSPtr: .res 2
 	testcrc: .res 4
+	DumpMode: .res 1
 
 ; BIOS zeropage variables
 .segment "BIOSZP": zeropage

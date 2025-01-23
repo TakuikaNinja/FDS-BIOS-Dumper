@@ -12,9 +12,9 @@
 .macro vram_string ppu16, addr16, length
 	.assert length > 0, error, "invalid string size"
 	.assert length <= BUFFER_SIZE, warning, "string size exceeds buffer"
-	lda #>ppu16
-	ldx #<ppu16
-	ldy #length
+	lda #>(ppu16)
+	ldx #<(ppu16)
+	ldy #(length)
 	jsr PrepareVRAMString
 	.addr addr16
 .endmacro

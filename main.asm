@@ -23,15 +23,15 @@ Reset:
 		sta $700,x
 		inx
 		bne @clrmem
-		jsr InitFileHeader
+		jsr MoveSpritesOffscreen
 		jsr InitNametables
 		
 		lda #BUFFER_SIZE								; set VRAM buffer size
 		sta VRAM_BUFFER_SIZE
 
 		lda #%10000000									; enable NMIs & change background pattern map access
-		sta PPU_CTRL
 		sta PPU_CTRL_MIRROR
+		sta PPU_CTRL
 		
 Main:
 		jsr ProcessBGMode
@@ -72,6 +72,8 @@ NonMaskableInterrupt:
 		lda NMIReady									; check if ready to do NMI logic (i.e. not a lag frame)
 		beq NotReady
 		
+		jsr SpriteDMA
+		
 		lda NeedDraw									; transfer Data to PPU if required
 		beq :+
 		
@@ -107,9 +109,13 @@ InterruptRequest:
 		rti
 
 EnableRendering:
-		lda #%00001010									; enable background and queue it for next NMI
+		lda #%00011110									; enable rendering and queue it for next NMI
 	.byte $2c											; [skip 2 bytes]
-		
+
+DisableSprites:
+		lda #%00001010
+	.byte $2c											; [skip 2 bytes]
+
 DisableRendering:
 		lda #%00000000									; disable background and queue it for next NMI
 
@@ -118,6 +124,12 @@ UpdatePPUMask:
 		lda #$01
 		sta NeedPPUMask
 		rts
+
+MoveSpritesOffscreen:
+		lda #$ff										; fill OAM buffer with $ff to move offscreen
+		ldx #>oam
+		ldy #>oam
+		jmp MemFill
 
 InitNametables:
 		lda #$20										; top-left
@@ -246,6 +258,7 @@ ProcessBGMode:
 		lda BGMode
 		jsr JumpEngine
 	.addr BGInit
+	.addr DumpModeSelect
 	.addr DumpPrep
 	.addr DumpBIOS
 	.addr DumpSuccess
@@ -261,14 +274,56 @@ BGInit:
 		inc BGMode
 		jmp EnableRendering								; remember to enable rendering for the next NMI
 
+; Selection interface for 2 dumping modes
+DumpModeSelect:
+		lda P1_PRESSED
+		and #BUTTON_START
+		beq :+
+		
+		inc BGMode										; go to next mode on start press
+		rts
+:
+		lda P1_PRESSED
+		and #BUTTON_SELECT
+		beq :+
+		
+		lda DumpMode									; toggle dump mode on select press
+		eor #$01
+		sta DumpMode
+:
+		ldx DumpMode
+		lda CursorYPos,x
+		sta oam											; Y position
+		lda #$1f										; (rightwards arrow)
+		sta oam+1										; tile number
+		lda #$00
+		sta oam+2										; attributes
+		lda #64
+		sta oam+3										; X position
+		rts
+
+CursorYPos:
+	.byte 119, 135
+
 ; Print a message before dumping the BIOS
 DumpPrep:
-		vram_string $218A, PrepMsg, PrepMsgLength
+		jsr InitFileHeader
+		ldx DumpMode
+		lda FileSizes,x
+		sta FileHeader+13								; set file size hi byte
+		lda MaxFileNums,x
+		sta FileNumCMP+1								; set max file count - 1
+		
+		vram_string $2189, PrepMsg, PrepMsgLength
+		vram_string $21e9, BlankMsg, BlankMsgLength
+		vram_string $2229, BlankMsg, BlankMsgLength
 		sta StringStatus								; save status to check later
+		jsr DisableSprites								; avoid visible OAM decay during dumping process
 		inc BGMode										; next mode
 		lda #$01										; queue VRAM transfer for next NMI
 		sta NeedDraw
 		rts
+
 
 ; Dump the BIOS to 1KiB disk files & show error messages if necessary
 DumpBIOS:
@@ -280,7 +335,9 @@ DumpBIOS:
 		bne PrintError
 		
 		lda FileNum
-		cmp #$0B										; check if dump all done
+
+FileNumCMP:
+		cmp #$0b										; check if dump all done
 		beq FinishDump									; end loop
 		
 		inc FileNum										; update file number
@@ -312,6 +369,7 @@ PrintError:
 		stx ErrorNum
 		sty ErrorNum+1
 		vram_string $2195, ErrorMsg, ErrorMsgLength
+		vram_string $2195+ErrorMsgLength, ErrorNum, ErrorNumLength
 		sta StringStatus								; save status to check later
 		lda #$01										; queue VRAM transfer for next NMI
 		sta NeedDraw
@@ -365,6 +423,12 @@ FileHeaderR:
 	.word __FILE4_DAT_RUN__
 	.byte $00
 
+FileSizes:
+	.hibytes $2000, __FILE4_DAT_SIZE__
+
+MaxFileNums:
+	.byte $04, $0b
+
 ; Display a success message
 DumpSuccess:
 		vram_string $2195, SuccessMsg, SuccessMsgLength
@@ -380,8 +444,8 @@ DoNothing:
 
 ; String data
 Strings:
-	define_string PrepMsg, "Dumping..."
-	define_string BlankMsg, "       "
+	define_string PrepMsg, " Dumping... "
+	define_string BlankMsg, "              "
 	define_string ErrorMsg, "Err. "
 	define_string ErrorNum, "00"
 	define_string SuccessMsg, "OK!"
@@ -397,7 +461,7 @@ Palettes:
 	encode_length INC1, COPY, PaletteDataSize
 
 .proc PaletteData
-	.repeat 4
+	.repeat 8
 	.byte $0f, $00, $10, $20
 	.endrepeat
 .endproc
@@ -411,6 +475,13 @@ TextData:
 	encode_string INC1, COPY, "CRC32:"
 	
 	encode_call CRC32Struct
+	
+	.dbyt $2189
+	encode_string INC1, COPY, "Select Mode:"
+	.dbyt $21e9
+	encode_string INC1, COPY, "Fast - 1 File"
+	.dbyt $2229
+	encode_string INC1, COPY, "Slow - 8 Files"
 	
 	encode_terminator
 
