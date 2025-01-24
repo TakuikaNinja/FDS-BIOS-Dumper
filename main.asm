@@ -310,7 +310,7 @@ DumpPrep:
 		jsr InitFileHeader
 		ldx DumpMode
 		lda FileSizes,x
-		sta FileHeader+13								; set file size hi byte
+		sta FileHeader+12								; set file size hi byte
 		lda MaxFileNums,x
 		sta FileNumCMP+1								; set max file count - 1
 		
