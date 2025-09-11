@@ -37,6 +37,7 @@ Here are some known aftermarket variations, for completeness (not guaranteed or 
 | Origin                    | CRC32    |
 | :------------------------ | :------: |
 | Animal Crossing, Wii VC   | 0BA8D953 |
+| 3DS VC                    | 17E30673 |
 | PowerPak                  | 93B3BD15 |
 | Everdrive N8(?), N8 Pro   | CE3A3A3D |
 
