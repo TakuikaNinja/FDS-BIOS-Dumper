@@ -38,6 +38,8 @@ Here are some known aftermarket variations, for completeness (not guaranteed or 
 | :---------------------------- | :------: |
 | Animal Crossing, Wii/Wii U VC | 0BA8D953 |
 | 3DS VC                        | 17E30673 |
+| 3DS VC (Nazo no Murasamejou)  | 34E2B2C7 |
+| Game & Watch: SMB             | 7D8F0C3C |
 | PowerPak                      | 93B3BD15 |
 | Everdrive N8(?), N8 Pro       | CE3A3A3D |
 
