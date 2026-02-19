@@ -37,6 +37,7 @@ Here are some known aftermarket variations, for completeness (not guaranteed or 
 | Origin                        | CRC32    |
 | :---------------------------- | :------: |
 | Animal Crossing, Wii/Wii U VC | 0BA8D953 |
+| Famicom Mini (GBA)            | 6C1BCC70 |
 | 3DS VC                        | 17E30673 |
 | 3DS VC (Nazo no Murasamejou)  | 34E2B2C7 |
 | Game & Watch: SMB             | 7D8F0C3C |
